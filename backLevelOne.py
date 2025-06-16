@@ -1,12 +1,13 @@
 import os
 import re
-import json
 import pdfplumber
 import numpy as np
+import faiss
 from openai import OpenAI
 from flask import Flask, request, jsonify
 
 client = OpenAI(api_key=os.getenv("OPENAI_API"))
+DIMENSIONS = 3072
 
 def clean_text(text):
     return re.sub(r'\s+', ' ', text).strip()
@@ -32,23 +33,28 @@ def split_chunks(text, max_tokens=500):
 def get_embeddings(texts):
     return [client.embeddings.create(input=[t], model="text-embedding-3-large").data[0].embedding for t in texts]
 
-def search(query_emb, embeddings, k=3):
-    sims = [(i, np.dot(query_emb, emb)) for i, emb in enumerate(embeddings)]
-    sims.sort(key=lambda x: x[1], reverse=True)
-    return [i for i, _ in sims[:k]]
+def build_index(embs):
+    index = faiss.IndexFlatIP(DIMENSIONS)
+    arr = np.array(embs).astype("float32")
+    faiss.normalize_L2(arr)
+    index.add(arr)
+    return index
 
 app = Flask(__name__)
 texto = load_pdf("./dockermanual.pdf")
 chunks = split_chunks(texto)
 embeddings = get_embeddings(chunks)
+index = build_index(embeddings)
 
 @app.route("/query", methods=["POST"])
 def query():
     data = request.get_json()
     q = data.get("query")
     q_emb = client.embeddings.create(input=[q], model="text-embedding-3-large").data[0].embedding
-    top = search(q_emb, embeddings)
-    ctx = "\n\n---\n\n".join(chunks[i] for i in top)
+    vec = np.array([q_emb], dtype="float32")
+    faiss.normalize_L2(vec)
+    _, I = index.search(vec, 3)
+    ctx = "\n\n---\n\n".join(chunks[i] for i in I[0])
     return jsonify({"contexto": ctx})
 
 if __name__ == "__main__":
