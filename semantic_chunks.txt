@@ -1,0 +1,23 @@
+[{"chunk": "Docker Compose Docker Compose is a tool for defining and running multi-container applications. It is the key to unlocking a streamlined and efficient development and deployment experience. Compose simplifies the control of your entire application stack, making it easy to manage services, networks, and volumes in a single YAML configuration file. Then, with a single command, you create and start all the services from your configuration file."}, 
+
+{"chunk": "Compose works in all environments; production, staging, development, testing, as well as CI workflows. It also has commands for managing the whole lifecycle of your application: Start, stop, and rebuild services View the status of running services Stream the log output of running services Run a one-off command on a service."}, 
+
+{"chunk": "Key benefits of Docker Compose Using Docker Compose offers several benefits that streamline the development, deployment, and management of containerized applications: Simplified control, Efficient collaboration, Rapid application development, Portability across environments, Extensive community and support."}, 
+
+{"chunk": "Common use cases of Docker Compose Compose can be used in many different ways. Some common use cases are outlined below. Development environments, Automated testing environments, Single host deployments."}, 
+
+{"chunk": "How Compose works With Docker Compose you use a YAML configuration file, known as the Compose file, to configure your applicationʼs services, and then you create and start all the services from your configuration with the Compose CLI."}, 
+
+{"chunk": "The Compose application model Computing components of an application are defined as services. A service is an abstract concept implemented on platforms by running the same container image, and configuration, one or more times. Services communicate with each other through networks. Services store and share persistent data into volumes."}, 
+
+{"chunk": "The Compose file The default path for a Compose file is compose.yaml (preferred) or compose.yml that is placed in the working directory. Compose also supports dockercompose.yaml and docker-compose.yml for backwards compatibility of earlier versions. If both files exist, Compose prefers the canonical compose.yaml."}, 
+
+{"chunk": "CLI The Docker CLI lets you interact with your Docker Compose applications through the docker compose command, and its subcommands. Using the CLI, you can manage the lifecycle of your multi-container applications defined in the compose.yaml file."}, 
+
+{"chunk": "Illustrative example The following example illustrates the Compose concepts outlined above. The example is non-normative. Consider an application split into a frontend web application and a backend service. The frontend is configured at runtime with an HTTP configuration file managed by infrastructure, providing an external domain name, and an HTTPS server certificate injected by the platform's secured secret store."}, 
+
+{"chunk": "Overview of installing Docker Compose This page summarizes the different ways you can install Docker Compose, depending on your platform and needs. Installation scenarios Scenario one: Install Docker Desktop (Recommended), Scenario two: Install the Docker Compose plugin (Linux only), Scenario three: Install the Docker Compose standalone (Legacy)."}, 
+
+{"chunk": "Docker Compose Quickstart This tutorial aims to introduce fundamental concepts of Docker Compose by guiding you through the development of a basic Python web application. Using the Flask framework, the application features a hit counter in Redis, providing a practical example of how Docker Compose can be applied in web development scenarios."}, 
+
+{"chunk": "Step 1: Set up, Step 2: Define services in a Compose file, Step 3: Build and run your app with Compose, Step 4: Edit the Compose file to use Compose Watch, Step 5: Re-build and run the app with Compose, Step 6: Update the application, Step 7: Split up your services, Step 8: Experiment with some other commands."}]
