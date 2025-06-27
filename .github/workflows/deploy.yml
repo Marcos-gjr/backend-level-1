@@ -10,9 +10,16 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API }}
+
     steps:
       - name: Checkout do repositório
         uses: actions/checkout@v3
+
+      - name: Gerar arquivo .env
+        run: |
+          echo "OPENAI_API_KEY=${OPENAI_API_KEY}" > .env
 
       - name: Configurar credenciais AWS
         uses: aws-actions/configure-aws-credentials@v2

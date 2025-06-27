@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 # --- Carrega variáveis de ambiente ---
 load_dotenv()
-OPENAI_API_KEY = os.getenv("OPENAI_API")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 # --- Paths e modelos ---
