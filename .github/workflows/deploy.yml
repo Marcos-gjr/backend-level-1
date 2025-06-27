@@ -32,12 +32,12 @@ jobs:
       - name: Criar nova versão do EB
         run: |
           aws elasticbeanstalk create-application-version \
-            --application-name backendapp \
+            --application-name backend-deploy \
             --version-label ${{ github.sha }} \
             --source-bundle S3Bucket="elasticbeanstalk-us-east-1-107193530096",S3Key="deploy-${{ github.sha }}.zip"
 
-      - name: Atualizar environment
+      - name: Atualizar ambiente EB
         run: |
           aws elasticbeanstalk update-environment \
-            --environment-name Backendapp-env \
+            --environment-name Backend-deploy-env \
             --version-label ${{ github.sha }}
