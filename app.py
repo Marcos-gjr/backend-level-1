@@ -27,7 +27,7 @@ CHAT_MODEL  = "gpt-3.5-turbo"
 
 DIMENSIONS = 3072
 
-# custos 1K tokens
+# custo por 1K tokens
 EMBED_COST_PER_1K        = 0.00013
 CHUNK_INPUT_COST_PER_1K  = 0.03
 CHUNK_OUTPUT_COST_PER_1K = 0.06
@@ -80,7 +80,7 @@ def build_faiss_index(embs: List[List[float]]) -> faiss.IndexFlatIP:
     index.add(arr)
     return index
 
-# cache das respostas para evitar chamadas desnecessárias a api
+# cache de respostas
 CHAT_CACHE_FILE = "chat_cache.pkl"
 try:
     with open(CHAT_CACHE_FILE, "rb") as f:
@@ -89,7 +89,7 @@ except FileNotFoundError:
     chat_cache = {}
 
 def answer_query(query: str, index, chunks: List[str], k: int = 3) -> str:
-    # custo query
+    # custo da query
     q_tok = count_tokens(query)
     print(f"[RAG] query tokens: {q_tok}, cost: ${(q_tok/1000)*CHAT_INPUT_COST_PER_1K:.6f}")
 
@@ -108,7 +108,7 @@ def answer_query(query: str, index, chunks: List[str], k: int = 3) -> str:
         print("[CHAT] resposta obtida do cache")
         return chat_cache[cache_key]
 
-    # preparo do prompt com base no contexto 
+    # preparo do prompt
     prompt = [
         {"role":"system","content":"Você é um assistente que responde com base no contexto."},
         {"role":"user",  "content":f"Contexto:\n{context}\n\nPergunta: {query}"}
@@ -116,7 +116,7 @@ def answer_query(query: str, index, chunks: List[str], k: int = 3) -> str:
     p_tokens = count_tokens("".join(m["content"] for m in prompt))
     print(f"[CHAT] prompt tokens: {p_tokens}, cost: ${(p_tokens/1000)*CHAT_INPUT_COST_PER_1K:.6f}")
 
-    # chamada chat
+    # chamada ao chat
     chat = client.chat.completions.create(model=CHAT_MODEL, messages=prompt, temperature=0.2)
     out = chat.choices[0].message.content
 
@@ -130,7 +130,7 @@ def answer_query(query: str, index, chunks: List[str], k: int = 3) -> str:
 
     return out
 
-# build do FAISS na inicialização
+# build do índice FAISS na inicialização
 texto  = load_pdf_clean("./dockermanual.pdf")
 blocos = get_semantic_chunks(texto)
 embs   = get_embeddings(blocos)

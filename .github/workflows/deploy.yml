@@ -1,0 +1,42 @@
+name: Deploy no AWS Elastic Beanstalk
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v3
+
+      - name: Configurar credenciais AWS
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            sa-east-1    # ajuste pra sua região
+
+      - name: Empacotar código
+        run: zip -r deploy.zip .
+
+      - name: Enviar bundle para S3
+        run: |
+          aws s3 cp deploy.zip \
+            s3://elasticbeanstalk-sa-east-1-<seu-account-id>/deploy-${{ github.sha }}.zip
+
+      - name: Criar nova versão do EB
+        run: |
+          aws elasticbeanstalk create-application-version \
+            --application-name minha-app \
+            --version-label ${{ github.sha }} \
+            --source-bundle S3Bucket="elasticbeanstalk-sa-east-1-<seu-account-id>",S3Key="deploy-${{ github.sha }}.zip"
+
+      - name: Atualizar environment
+        run: |
+          aws elasticbeanstalk update-environment \
+            --environment-name minha-app-env \
+            --version-label ${{ github.sha }}
