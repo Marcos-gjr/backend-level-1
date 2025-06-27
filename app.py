@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 # --- Carrega variáveis de ambiente ---
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+logger.info("OPENAI_API_KEY 2 de %s", OPENAI_API_KEY)
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 # --- Paths e modelos ---
@@ -42,9 +43,9 @@ EMBED_CACHE_FILE = "embeddings_cache.pkl"
 CHAT_CACHE_FILE  = "chat_cache.pkl"
 # base do script
 BASE_DIR   = os.path.abspath(os.path.dirname(__file__))
+# raiz do deploy
 DEPLOY_DIR = os.getcwd()
 
-# conteúdo da raiz do seu deploy
 itens = os.listdir(DEPLOY_DIR)
 logger.info("Conteúdo de %s: %s", DEPLOY_DIR, itens)
 
@@ -177,7 +178,6 @@ def gerar_pdf(urls: List[str], output: str):
 
     font_regular = fonts_dir / 'DejaVuSans.ttf'
     font_bold    = fonts_dir / 'DejaVuSans-Bold.ttf'
-
     logger.info("Usando pasta de fontes em: %s", fonts_dir)
 
     # 2) Cria o PDF usando fonts_dir
@@ -188,7 +188,7 @@ def gerar_pdf(urls: List[str], output: str):
     pdf.add_font('DejaVu', '',   str(font_regular), uni=True)
     pdf.add_font('DejaVu', 'B',  str(font_bold),    uni=True)
 
-    # 3) Restante da geração
+    # 3) Resto da geração
     for url in urls:
         txt = extrair_texto(url)
         pdf.add_page()
