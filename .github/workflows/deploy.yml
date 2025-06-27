@@ -3,7 +3,7 @@ name: Deploy no AWS Elastic Beanstalk
 on:
   push:
     branches:
-      - main
+      - master
 
 jobs:
   deploy:

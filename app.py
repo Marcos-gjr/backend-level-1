@@ -27,7 +27,7 @@ CHAT_MODEL  = "gpt-3.5-turbo"
 
 DIMENSIONS = 3072
 
-# custo por 1K tokens
+# custos por 1K tokens
 EMBED_COST_PER_1K        = 0.00013
 CHUNK_INPUT_COST_PER_1K  = 0.03
 CHUNK_OUTPUT_COST_PER_1K = 0.06
