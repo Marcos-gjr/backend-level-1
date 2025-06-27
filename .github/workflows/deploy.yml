@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -18,7 +19,7 @@ jobs:
         with:
           aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region:            sa-east-1    # ajuste pra sua região
+          aws-region:            us-east-1
 
       - name: Empacotar código
         run: zip -r deploy.zip .
@@ -26,17 +27,17 @@ jobs:
       - name: Enviar bundle para S3
         run: |
           aws s3 cp deploy.zip \
-            s3://elasticbeanstalk-sa-east-1-<seu-account-id>/deploy-${{ github.sha }}.zip
+            s3://elasticbeanstalk-us-east-1-107193530096/deploy-${{ github.sha }}.zip
 
       - name: Criar nova versão do EB
         run: |
           aws elasticbeanstalk create-application-version \
-            --application-name minha-app \
+            --application-name backendapp \
             --version-label ${{ github.sha }} \
-            --source-bundle S3Bucket="elasticbeanstalk-sa-east-1-<seu-account-id>",S3Key="deploy-${{ github.sha }}.zip"
+            --source-bundle S3Bucket="elasticbeanstalk-us-east-1-107193530096",S3Key="deploy-${{ github.sha }}.zip"
 
       - name: Atualizar environment
         run: |
           aws elasticbeanstalk update-environment \
-            --environment-name minha-app-env \
+            --environment-name Backendapp-env \
             --version-label ${{ github.sha }}
