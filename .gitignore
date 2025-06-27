@@ -1,7 +1,13 @@
+# não versionar variáveis de ambiente
 .env
 # virtual env
 venv/
-.venv
+.venv/
 __pycache__/
 *.pyc
 *.log
+# fpdf cache
+fonts/DejaVuSans.cw127.pkl
+fonts/DejaVuSans.pkl
+fonts/DejaVuSans-Bold.cw127.pkl
+fonts/DejaVuSans-Bold.pkl

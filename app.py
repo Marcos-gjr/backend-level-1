@@ -16,6 +16,8 @@ import pdfplumber
 import faiss
 import numpy as np
 from openai import OpenAI
+from pathlib import Path
+
 
 # --- Configuração de logs ---
 logging.basicConfig(
@@ -38,7 +40,21 @@ DEFAULT_PDF_PATH = "./documentacao.pdf"
 CHUNK_CACHE_FILE = "semantic_chunks.json"
 EMBED_CACHE_FILE = "embeddings_cache.pkl"
 CHAT_CACHE_FILE  = "chat_cache.pkl"
-FONTS_DIR        = os.path.join(os.path.dirname(__file__), "fonts")
+# base do script
+BASE_DIR   = os.path.abspath(os.path.dirname(__file__))
+DEPLOY_DIR = os.getcwd()
+
+# conteúdo da raiz do seu deploy
+itens = os.listdir(DEPLOY_DIR)
+logger.info("Conteúdo de %s: %s", DEPLOY_DIR, itens)
+
+# se quiser ver árvore inteira, faça:
+for root, dirs, files in os.walk(DEPLOY_DIR):
+    logger.info("DIR %s: subdirs=%s files=%s", root, dirs, files)
+
+FONTS_DIR = Path('/var/app/current/fonts')
+
+logger.info("Usando pasta de fontes em: %s", FONTS_DIR)
 
 # --- Estado global de processing ---
 status = {
@@ -155,10 +171,24 @@ def extrair_texto(url: str) -> str:
 
 
 def gerar_pdf(urls: List[str], output: str):
+    # 1) Descobre em tempo de execução onde está o fonts/
+    base_dir = Path(__file__).resolve().parent
+    fonts_dir = base_dir / 'fonts'
+
+    font_regular = fonts_dir / 'DejaVuSans.ttf'
+    font_bold    = fonts_dir / 'DejaVuSans-Bold.ttf'
+
+    logger.info("Usando pasta de fontes em: %s", fonts_dir)
+
+    # 2) Cria o PDF usando fonts_dir
     pdf = FPDF()
     pdf.set_auto_page_break(True, margin=15)
-    pdf.add_font('DejaVu', '', os.path.join(FONTS_DIR, 'DejaVuSans.ttf'), uni=True)
-    pdf.add_font('DejaVu', 'B', os.path.join(FONTS_DIR, 'DejaVuSans-Bold.ttf'), uni=True)
+
+    # adiciona fontes apontando para fonts_dir
+    pdf.add_font('DejaVu', '',   str(font_regular), uni=True)
+    pdf.add_font('DejaVu', 'B',  str(font_bold),    uni=True)
+
+    # 3) Restante da geração
     for url in urls:
         txt = extrair_texto(url)
         pdf.add_page()
@@ -167,9 +197,10 @@ def gerar_pdf(urls: List[str], output: str):
         pdf.ln(2)
         pdf.set_font('DejaVu', '', 12)
         pdf.multi_cell(0, 6, txt)
+
     pdf.output(output)
 
-# --- Thread de processamento ---
+# --- processamento ---
 
 def process_urls(urls: List[str]):
     global idx, blocos, status, embed_cache
@@ -208,7 +239,7 @@ def process_urls(urls: List[str]):
         status.update(status="error", progress=0, message=str(e))
 
 
-# --- Flask + Swagger setup ---
+# --- Flask + Swagger ---
 
 app = Flask(__name__)
 api = Api(app, version="1.0", title="Unified PDF RAG API",
@@ -247,7 +278,6 @@ class StatusResource(Resource):
 class QueryResource(Resource):
     @api.expect(query_model)
     def post(self):
-        """Responde usando contexto anterior ou erro se não pronto."""
         data = request.get_json()
         try:
             resp = answer_query(data["query"], data.get("k", 3))
@@ -256,7 +286,7 @@ class QueryResource(Resource):
             api.abort(400, str(e))
 
 if __name__ == "__main__":
-    os.makedirs(FONTS_DIR, exist_ok=True)
+    #os.makedirs(FONTS_DIR, exist_ok=True)
     # Carrega caches existentes (sem reconstruir)
     if os.path.exists(CHUNK_CACHE_FILE):
         with open(CHUNK_CACHE_FILE, "r", encoding="utf-8") as f:
