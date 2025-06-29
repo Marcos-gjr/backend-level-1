@@ -11,17 +11,45 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API }}
-
-
+      OPENAI_API: ${{ secrets.OPENAI_API }}
+      SONAR_TOKEN:    ${{ secrets.SONARCLOUD_TOKEN }}
 
     steps:
       - name: Checkout do repositório
         uses: actions/checkout@v3
 
+      - name: Set up Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: '3.12'
+
+      - name: Instalar dependências & coverage
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install coverage pytest
+
+      - name: Rodar testes e gerar relatório de coverage
+        run: |
+          coverage run -m pytest
+          coverage xml -o coverage.xml
+
+      - name: Análise no SonarCloud
+        uses: sonarsource/sonarcloud-github-action@v1
+        env:
+          SONAR_TOKEN:    ${{ secrets.SONARCLOUD_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
+        with:
+          args: >
+            -Dsonar.organization=marcos-gjr
+            -Dsonar.projectKey=Marcos-gjr_backend-level-1
+            -Dsonar.sources=.
+            -Dsonar.tests=tests
+            -Dsonar.python.coverage.reportPaths=coverage.xml
+
       - name: Gerar arquivo .env
         run: |
-          echo "OPENAI_API_KEY=${OPENAI_API_KEY}" > .env  
+          echo "OPENAI_API=${OPENAI_API}" > .env
 
       - name: Configurar credenciais AWS
         uses: aws-actions/configure-aws-credentials@v2
@@ -45,7 +73,7 @@ jobs:
             --version-label ${{ github.sha }} \
             --source-bundle S3Bucket="elasticbeanstalk-us-east-1-107193530096",S3Key="deploy-${{ github.sha }}.zip"
 
-      - name: Atualizar ambiente EB
+      - name: Atualizar environment
         run: |
           aws elasticbeanstalk update-environment \
             --environment-name Backend-deploy-env \
