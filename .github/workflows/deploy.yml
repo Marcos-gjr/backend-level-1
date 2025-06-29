@@ -12,13 +12,14 @@ jobs:
 
     env:
       OPENAI_API: ${{ secrets.OPENAI_API }}
-      SONAR_TOKEN:    ${{ secrets.SONARCLOUD_TOKEN }}
+      SONAR_TOKEN:    ${{ secrets.SONAR_TOKEN }}
+      SONAR_HOST_URL: https://sonarcloud.io
 
     steps:
       - name: Checkout do repositório
         uses: actions/checkout@v3
 
-      - name: Set up Python
+      - name: Set up Python 3.12
         uses: actions/setup-python@v3
         with:
           python-version: '3.12'
@@ -34,17 +35,36 @@ jobs:
           coverage run -m pytest
           coverage xml -o coverage.xml
 
-      - name: Análise no SonarCloud
-        uses: sonarsource/sonarcloud-github-action@v1
-        env:
-          SONAR_TOKEN:    ${{ secrets.SONARCLOUD_TOKEN }}
-          SONAR_HOST_URL: https://sonarcloud.io
+      - name: Set up Java 17
+        uses: actions/setup-java@v3
         with:
-          args: >
-            -Dsonar.organization=marcos-gjr
-            -Dsonar.projectKey=Marcos-gjr_backend-level-1
-            -Dsonar.sources=.
-            -Dsonar.tests=tests
+          distribution: temurin
+          java-version: '17'
+
+      - name: Instalar SonarScanner CLI
+        run: |
+          SCANNER_VERSION=4.8.1.3023
+          curl -sSLo sonar-scanner.zip \
+            https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SCANNER_VERSION}-linux.zip
+          unzip sonar-scanner.zip
+          echo "${{ github.workspace }}/sonar-scanner-${SCANNER_VERSION}-linux/bin" >> $GITHUB_PATH
+
+      - name: Executar análise SonarCloud
+        env:
+          SONAR_TOKEN:    ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
+          JAVA_HOME:      ${{ env.JAVA_HOME_17_X64 }}
+          PATH:           ${{ env.JAVA_HOME_17_X64 }}/bin:${{ env.PATH }}
+        run: |
+          # confirma que agora é Java 17
+          java -version
+          sonar-scanner \
+            -Dsonar.host.url=$SONAR_HOST_URL \
+            -Dsonar.login=$SONAR_TOKEN \
+            -Dsonar.organization=marcos-gjr \
+            -Dsonar.projectKey=Marcos-gjr_backend-level-1 \
+            -Dsonar.sources=. \
+            -Dsonar.tests=tests \
             -Dsonar.python.coverage.reportPaths=coverage.xml
 
       - name: Gerar arquivo .env
@@ -69,7 +89,7 @@ jobs:
       - name: Criar nova versão do EB
         run: |
           aws elasticbeanstalk create-application-version \
-            --application-name backend-deploy \
+            --application-name backendapp \
             --version-label ${{ github.sha }} \
             --source-bundle S3Bucket="elasticbeanstalk-us-east-1-107193530096",S3Key="deploy-${{ github.sha }}.zip"
 
