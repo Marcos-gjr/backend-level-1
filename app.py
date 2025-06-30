@@ -28,9 +28,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 load_dotenv()
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-logger.info("OPENAI_API_KEY 3 de %s", OPENAI_API_KEY)
-client = OpenAI(api_key=OPENAI_API_KEY)
+OPENAI_API = os.getenv("OPENAI_API")
+logger.info("OPENAI_API_KEY 3 de %s", OPENAI_API)
+client = OpenAI(api_key=OPENAI_API)
 
 CHUNK_MODEL      = os.getenv("CHUNK_MODEL")
 EMBED_MODEL      = os.getenv("EMBED_MODEL")
