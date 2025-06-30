@@ -134,12 +134,15 @@ def answer_query(query: str, k: int = 3) -> str:
     _, I = idx.search(q_vec, k)
     context = "\n\n---\n\n".join(blocos[i] for i in I[0])
     key = json.dumps({"ctx": context, "q": query}, ensure_ascii=False)
-    if key in chat_cache:
-        return chat_cache[key]
     prompt = [
-        {"role": "system", "content": "Você é um assistente que responde com base no contexto."},
+        {
+            "role": "system",
+            "content": "Você é um assistente que segue estas regras:\n\n1. Se o usuário fizer perguntas sobre suas próprias capacidades ou uso da ferramenta (ex.: “O que você pode me ajudar?”, “Como funciona este chat?”), responda normalmente, explicando suas funções e limitações.\n2. Para qualquer outra pergunta técnica ou de domínio, responda **apenas** com base no contexto que o usuário **explicitamente** forneceu nesta conversa. **Não** utilize nenhum conhecimento prévio ou fontes externas.\n3. Se o contexto **não** contiver informação suficiente para responder, responda **exatamente** “Não sei ainda.”\n4. Não elabore nem complemente além do contexto.\n\n---\n\n**Exemplos de comportamento**\n\n**Incorreto:**\nUsuário: o que você pode me ajudar?\nAssistente: Não sei ainda.\n\n**Correto:**\nUsuário: o que você pode me ajudar?\nAssistente: Eu posso te ajudar a entender e utilizar o Docker Compose, ... (resposta normal sobre capacidades)\n\n**Correto (domínio sem contexto):**\nUsuário: Como usar variáveis de ambiente e arquivos .env?\nAssistente: Não sei ainda.\n\nUsuário: Como definir políticas de reinício (restart) para serviços?\nAssistente: Não sei ainda.\n\nUsuário: Como configurar healthchecks para containers?\nAssistente: Não sei ainda.\n\nUsuário: Como limitar recursos (CPU, memória) de um serviço?\nAssistente: Não sei ainda."
+        },
         {"role": "user",   "content": f"Contexto:\n{context}\n\nPergunta: {query}"}
     ]
+
+
     chat = client.chat.completions.create(model=CHAT_MODEL, messages=prompt, temperature=0.2)
     out = chat.choices[0].message.content
     chat_cache[key] = out
@@ -216,6 +219,9 @@ def process_urls(urls: List[str], files_data: Optional[List[Tuple[str, bytes]]] 
 app = Flask(__name__)
 api = Api(app, version="1.0", title="Unified PDF RAG API",
           description="Contexto só é reconstruído em POST /process", doc="/docs")
+
+app.logger.handlers = logger.handlers
+app.logger.setLevel(logger.level)
 
 upload_parser = reqparse.RequestParser()
 upload_parser.add_argument("urls", type=str, required=False, location="form", help="JSON com lista de URLs")
