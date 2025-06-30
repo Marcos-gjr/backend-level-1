@@ -56,9 +56,6 @@ jobs:
             --version-label ${{ github.sha }} \
             --source-bundle S3Bucket="elasticbeanstalk-us-east-1-107193530096",S3Key="deploy-${{ github.sha }}.zip"
       
-      - name: Aguardar propagação da versão
-        run: sleep 5
-      
       - name: Atualizar environment
         run: |
           aws elasticbeanstalk update-environment \
