@@ -317,4 +317,4 @@ if __name__ == "__main__":
         with open(CHAT_CACHE_FILE, "rb") as f:
             chat_cache = pickle.load(f)
 
-    app.run(host="0.0.0.0", port=8001, debug=True)
+    app.run(host="0.0.0.0", port=8001, debug=False)
