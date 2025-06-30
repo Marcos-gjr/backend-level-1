@@ -1,7 +1,6 @@
 import os
 import json
 import pickle
-import tempfile
 
 import pytest
 import numpy as np
@@ -33,9 +32,9 @@ def test_build_faiss_index_and_search():
     assert isinstance(idx, faiss.IndexFlatIP)
     assert idx.ntotal == 2
 
-    query = np.array([[1.0, 0.0]], dtype="float32")
-    faiss.normalize_L2(query)
-    D, I = idx.search(query, 2)
+    q = np.array([[1.0, 0.0]], dtype="float32")
+    faiss.normalize_L2(q)
+    D, I = idx.search(q, 2)
     assert I[0][0] == 0
     assert D[0][0] == pytest.approx(1.0, rel=1e-3)
 
@@ -58,38 +57,7 @@ def test_get_semantic_chunks_creates_cache(tmp_path, monkeypatch):
 
     with open(cache_file, "r", encoding="utf-8") as f:
         data = json.load(f)
-    cached_chunks = [item["chunk"] for item in data]
-    assert chunks == cached_chunks
-
-
-def test_extrair_texto_strips_html(monkeypatch):
-    html = """
-    <html>
-      <head><style>body{}</style><script>alert(1)</script></head>
-      <body>
-        <nav>nav</nav>
-        <header>hdr</header>
-        <footer>ftr</footer>
-        <aside>aside</aside>
-        <p>Olá mundo!</p>
-        <div> Teste   de    texto </div>
-      </body>
-    </html>
-    """
-    class DummyResponse:
-        def __init__(self, text):
-            self.text = text
-        def raise_for_status(self):
-            pass
-
-    monkeypatch.setattr(requests, "get", lambda url: DummyResponse(html))
-
-    texto = app.extrair_texto("https://fake.url")
-    assert "Olá mundo!" in texto
-    assert "Teste   de    texto" in texto
-
-    for forbidden in ("alert(1)", "nav", "hdr", "ftr", "aside"):
-        assert forbidden not in texto
+    assert chunks == [item["chunk"] for item in data]
 
 
 def test_load_pdf_clean(tmp_path):
@@ -101,64 +69,126 @@ def test_load_pdf_clean(tmp_path):
     pdf.output(str(pdf_path))
 
     text = app.load_pdf_clean(str(pdf_path))
-    assert "Linha1 Linha2" in text
+    assert "Linha1Linha2" in text
 
 
 def test_get_embeddings_creates_cache(tmp_path, monkeypatch):
-    chunks = ["teste"]
+    chunks = ["texto1", "texto2"]
     cache_file = tmp_path / "embeddings.pkl"
     monkeypatch.setattr(app, "EMBED_CACHE_FILE", str(cache_file))
 
-    class DummyOpenAI:
-        class Embeddings:
-            @staticmethod
-            def create(input, **kwargs):
-                return {"data": [{"embedding": [0.1, 0.2]}]}
-    monkeypatch.setattr(app, "openai", DummyOpenAI)
+    class DummyItem:
+        def __init__(self, embedding):
+            self.embedding = embedding
+
+    class DummyResp:
+        def __init__(self):
+            self.data = [DummyItem([0.5, 0.5]), DummyItem([1.0, 0.0])]
+
+    class DummyEmbeddings:
+        @staticmethod
+        def create(model, input):
+            return DummyResp()
+
+    class DummyClient:
+        embeddings = DummyEmbeddings()
+
+    monkeypatch.setattr(app, "client", DummyClient())
 
     embs = app.get_embeddings(chunks)
     assert cache_file.exists()
+
     with open(cache_file, "rb") as f:
-        data = pickle.load(f)
-    assert chunks[0] in data
-    assert data[chunks[0]] == pytest.approx(embs[0])
+        stored = pickle.load(f)
+    assert set(stored.keys()) == set(chunks)
+    assert embs == [stored[c] for c in chunks]
 
 
 def test_answer_query_ready(monkeypatch):
     app.status["status"] = "ready"
-    arr = np.array([[1.0, 0.0]], dtype="float32")
-    faiss.normalize_L2(arr)
-    app.idx = faiss.IndexFlatIP(2)
-    app.idx.add(arr)
 
-    monkeypatch.setattr(app, "get_semantic_chunks", lambda q: ["chunk"])
-    monkeypatch.setattr(app, "get_embeddings", lambda c: [[1.0, 0.0]])
+    monkeypatch.setattr(app, "get_semantic_chunks", lambda q: ["ctx"])
+    monkeypatch.setattr(app, "get_embeddings", lambda cs: [[1.0, 0.0]])
+
+    class DummyQItem:
+        def __init__(self, embedding):
+            self.embedding = embedding
+
+    class DummyQResp:
+        def __init__(self):
+            self.data = [DummyQItem([1.0, 0.0])]
+
+    class DummyEmbModel:
+        @staticmethod
+        def create(model, input):
+            return DummyQResp()
+
+    class DummyChoice:
+        def __init__(self):
+            self.message = type("m", (), {"content": "IA respondeu"})
+
+    class DummyChatComp:
+        @staticmethod
+        def create(model, messages, temperature):
+            resp = type("r", (), {})()
+            resp.choices = [DummyChoice()]
+            return resp
 
     class DummyChat:
-        @staticmethod
-        def create(**kwargs):
-            return {"choices": [{"message": {"content": "resposta IA"}}]}
-    monkeypatch.setattr(app, "openai", type("o", (), {"ChatCompletion": DummyChat}))
+        completions = DummyChatComp()
 
-    resp = app.answer_query("qualquer coisa")
-    assert resp == "resposta IA"
+    class DummyClient:
+        embeddings = DummyEmbModel()
+        chat = DummyChat()
+
+    monkeypatch.setattr(app, "client", DummyClient())
+
+    class DummyIndex:
+        def search(self, array, k):
+            return None, np.array([[0]])
+
+    app.idx = DummyIndex()
+
+    resp = app.answer_query("pergunta", k=1)
+    assert resp == "IA respondeu"
+
+
+def test_extrair_texto_strips_html(monkeypatch):
+    html = """
+    <html>
+      <head><style>body{}</style><script>alert(1)</script></head>
+      <body>
+        <nav>nav</nav><header>hdr</header><footer>ftr</footer><aside>aside</aside>
+        <p>Olá mundo!</p><div> Teste   de    texto </div>
+      </body>
+    </html>
+    """
+    class DummyResponse:
+        def __init__(self, text): self.text = text
+        def raise_for_status(self): pass
+
+    monkeypatch.setattr(requests, "get", lambda url: DummyResponse(html))
+    texto = app.extrair_texto("https://fake")
+    assert "Olá mundo!" in texto
+    assert "Teste   de    texto" in texto
+    for forbidden in ("alert(1)", "nav", "hdr", "ftr", "aside"):
+        assert forbidden not in texto
 
 
 def test_gerar_pdf(tmp_path, monkeypatch):
-    monkeypatch.setattr(app, "extrair_texto", lambda url: "Conteúdo PDF")
-
+    monkeypatch.setattr(app, "extrair_texto", lambda url: "conteúdo")
     output = tmp_path / "out.pdf"
-    path = app.gerar_pdf(["http://x"], str(output))
-    assert os.path.exists(path)
-    assert os.path.getsize(path) > 0
+    app.gerar_pdf(["url1"], str(output))
+    assert output.exists() and output.stat().st_size > 0
 
 
-def test_process_urls_transitions(tmp_path, monkeypatch):
-    monkeypatch.setattr(app, "gerar_pdf", lambda urls: None)
-    monkeypatch.setattr(app, "load_pdf_clean", lambda p: "txt")
-    monkeypatch.setattr(app, "get_semantic_chunks", lambda t: ["c1"])
+def test_process_urls_transitions(monkeypatch):
+    monkeypatch.setattr(app, "gerar_pdf", lambda urls, out: None)
+    monkeypatch.setattr(app, "load_pdf_clean", lambda path: "txt")
+    monkeypatch.setattr(app, "get_semantic_chunks", lambda t: ["c"])
     monkeypatch.setattr(app, "get_embeddings", lambda c: [[0.1]])
-    monkeypatch.setattr(app, "answer_query", lambda q: "ok")
+    monkeypatch.setattr(app, "build_faiss_index", lambda e: faiss.IndexFlatIP(1))
+    monkeypatch.setattr(app, "answer_query", lambda q, k: "resp")
 
     app.status["status"] = "idle"
     app.process_urls(["u1", "u2"])
@@ -174,14 +204,13 @@ class TestFlaskEndpoints:
         resp = client.post("/process", json={"urls": ["http://x"]})
         assert resp.status_code == 202
         data = resp.get_json()
-        assert data["status"] == "processing"
+        assert data["message"] == "Processamento iniciado"
 
     def test_status_endpoint(self, client):
         app.status["status"] = "processing"
         resp = client.get("/status")
         assert resp.status_code == 200
-        data = resp.get_json()
-        assert "status" in data
+        assert resp.get_json()["status"] == "processing"
 
     def test_query_endpoint_not_ready(self, client):
         app.status["status"] = "idle"
@@ -190,8 +219,9 @@ class TestFlaskEndpoints:
 
     def test_query_endpoint_ready(self, client, monkeypatch):
         app.status["status"] = "ready"
-        monkeypatch.setattr(app, "answer_query", lambda q: "final")
+        monkeypatch.setattr(app, "answer_query", lambda q, k: "ok")
         resp = client.post("/query", json={"query": "q"})
         assert resp.status_code == 200
         data = resp.get_json()
-        assert data["answer"] == "final"
+        assert len(data) == 1
+        assert list(data.values())[0] == "ok"

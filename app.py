@@ -126,28 +126,67 @@ def build_faiss_index(embs: List[List[float]]) -> faiss.IndexFlatIP:
 
 def answer_query(query: str, k: int = 3) -> str:
     global blocos
+    blocos = get_semantic_chunks(query)
+
     if idx is None or status["status"] != "ready":
         raise RuntimeError("Contexto não está pronto. Rode POST /process antes.")
+
     q_emb = client.embeddings.create(model=EMBED_MODEL, input=[query]).data[0].embedding
     q_vec = np.array([q_emb], dtype="float32")
     faiss.normalize_L2(q_vec)
+
     _, I = idx.search(q_vec, k)
-    context = "\n\n---\n\n".join(blocos[i] for i in I[0])
+    try:
+        i0 = int(I[0][0])
+    except Exception:
+        i0 = 0
+    if not blocos or i0 < 0 or i0 >= len(blocos):
+        i0 = 0
+    context = blocos[i0]
+
     key = json.dumps({"ctx": context, "q": query}, ensure_ascii=False)
     prompt = [
         {
             "role": "system",
-            "content": "Você é um assistente que segue estas regras:\n\n1. Se o usuário fizer perguntas sobre suas próprias capacidades ou uso da ferramenta (ex.: “O que você pode me ajudar?”, “Como funciona este chat?”), responda normalmente, explicando suas funções e limitações.\n2. Para qualquer outra pergunta técnica ou de domínio, responda **apenas** com base no contexto que o usuário **explicitamente** forneceu nesta conversa. **Não** utilize nenhum conhecimento prévio ou fontes externas.\n3. Se o contexto **não** contiver informação suficiente para responder, responda **exatamente** “Não sei ainda.”\n4. Não elabore nem complemente além do contexto.\n\n---\n\n**Exemplos de comportamento**\n\n**Incorreto:**\nUsuário: o que você pode me ajudar?\nAssistente: Não sei ainda.\n\n**Correto:**\nUsuário: o que você pode me ajudar?\nAssistente: Eu posso te ajudar a entender e utilizar o Docker Compose, ... (resposta normal sobre capacidades)\n\n**Correto (domínio sem contexto):**\nUsuário: Como usar variáveis de ambiente e arquivos .env?\nAssistente: Não sei ainda.\n\nUsuário: Como definir políticas de reinício (restart) para serviços?\nAssistente: Não sei ainda.\n\nUsuário: Como configurar healthchecks para containers?\nAssistente: Não sei ainda.\n\nUsuário: Como limitar recursos (CPU, memória) de um serviço?\nAssistente: Não sei ainda."
+            "content": (
+                "Você é um assistente que segue estas regras:\n\n"
+                "1. Se o usuário fizer perguntas sobre suas próprias capacidades ou uso da ferramenta "
+                "(ex.: “O que você pode me ajudar?”, “Como funciona este chat?”), responda normalmente, "
+                "explicando suas funções e limitações.\n"
+                "2. Para qualquer outra pergunta técnica ou de domínio, responda **apenas** com base no "
+                "contexto que o usuário **explicitamente** forneceu nesta conversa.\n"
+                "3. Se o contexto **não** contiver informação suficiente para responder, responda **exatamente** "
+                "“Não sei ainda.”\n"
+                "4. Cuidado ao elaborar com conteúdo além do contexto.\n\n"
+                "---\n\n"
+                "**Exemplos de comportamento**\n\n"
+                "**Incorreto:**\n"
+                "Usuário: o que você pode me ajudar?\n"
+                "Assistente: Não sei ainda.\n\n"
+                "**Correto:**\n"
+                "Usuário: o que você pode me ajudar?\n"
+                "Assistente: Eu posso te ajudar a entender e utilizar o Docker Compose, ...\n\n"
+                "**Correto (domínio sem contexto):**\n"
+                "Usuário: Como usar variáveis de ambiente e arquivos .env?\n"
+                "Assistente: Não sei ainda.\n"
+            )
         },
-        {"role": "user",   "content": f"Contexto:\n{context}\n\nPergunta: {query}"}
+        {
+            "role": "user",
+            "content": f"Contexto:\n{context}\n\nPergunta: {query}"
+        }
     ]
-
 
     chat = client.chat.completions.create(model=CHAT_MODEL, messages=prompt, temperature=0.2)
     out = chat.choices[0].message.content
     chat_cache[key] = out
     with open(CHAT_CACHE_FILE, "wb") as f:
         pickle.dump(chat_cache, f)
+
+    app.logger.info("Contexto: %s", context)
+    app.logger.info("Pergunta: %s", query)
+    app.logger.info("Resposta: %s", out)
+
     return out
 
 def extrair_texto(url: str) -> str:
