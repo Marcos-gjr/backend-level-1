@@ -6,10 +6,11 @@ import logging
 import threading
 import requests
 
-from typing import List
+from typing import List, Optional, Tuple
 from dotenv import load_dotenv
 from flask import Flask, request
-from flask_restx import Api, Resource, fields
+from flask_restx import Api, Resource, fields, reqparse
+from werkzeug.utils import secure_filename
 from bs4 import BeautifulSoup
 from fpdf import FPDF
 import pdfplumber
@@ -19,7 +20,6 @@ from openai import OpenAI
 from pathlib import Path
 
 
-# Logs
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s: %(message)s",
@@ -27,47 +27,40 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Variáveis de ambiente
 load_dotenv()
-OPENAI_API_KEY = os.getenv("OPENAI_API")
-logger.info("OPENAI_API_KEY 2 de %s", OPENAI_API_KEY)
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+logger.info("OPENAI_API_KEY 3 de %s", OPENAI_API_KEY)
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# Caminhos
-CHUNK_MODEL      = "gpt-4"
-EMBED_MODEL      = "text-embedding-3-large"
-CHAT_MODEL       = "gpt-3.5-turbo"
-DEFAULT_PDF_PATH = "./documentacao.pdf"
-CHUNK_CACHE_FILE = "semantic_chunks.json"
-EMBED_CACHE_FILE = "embeddings_cache.pkl"
-CHAT_CACHE_FILE  = "chat_cache.pkl"
-
+CHUNK_MODEL      = os.getenv("CHUNK_MODEL")
+EMBED_MODEL      = os.getenv("EMBED_MODEL")
+CHAT_MODEL       = os.getenv("CHAT_MODEL")
+DEFAULT_PDF_PATH = os.getenv("DEFAULT_PDF_PATH")
+CHUNK_CACHE_FILE = os.getenv("CHUNK_CACHE_FILE")
+EMBED_CACHE_FILE = os.getenv("EMBED_CACHE_FILE")
+CHAT_CACHE_FILE  = os.getenv("CHAT_CACHE_FILE")
 BASE_DIR   = os.path.abspath(os.path.dirname(__file__))
-
 DEPLOY_DIR = os.getcwd()
 
 itens = os.listdir(DEPLOY_DIR)
 logger.info("Conteúdo de %s: %s", DEPLOY_DIR, itens)
 
-for root, dirs, files in os.walk(DEPLOY_DIR):
-    logger.info("DIR %s: subdirs=%s files=%s", root, dirs, files)
-
-FONTS_DIR = Path('/var/app/current/fonts')
-
+FONTS_DIR = Path('./fonts')
 logger.info("Usando pasta de fontes em: %s", FONTS_DIR)
 
+# Status do process
 status = {
+    # status que aparecerão durante o processoidle, queued, generating_pdf, reading_pdf, chunking, embedding, indexing, ready, error
     "status": "idle",    
     "progress": 0,
     "message": None
 }
 
-# --- Contexto RAG 
+# Contexto inicial do RAG 
 embed_cache: dict = {}
 chat_cache: dict  = {}
-idx = None
-blocos: List[str] = []
-
+idx: Optional[faiss.IndexFlatIP] = None
+blocos: Optional[List[str]] = None
 
 
 def clean_text(text: str) -> str:
@@ -132,6 +125,7 @@ def build_faiss_index(embs: List[List[float]]) -> faiss.IndexFlatIP:
     return index
 
 def answer_query(query: str, k: int = 3) -> str:
+    global blocos
     if idx is None or status["status"] != "ready":
         raise RuntimeError("Contexto não está pronto. Rode POST /process antes.")
     q_emb = client.embeddings.create(model=EMBED_MODEL, input=[query]).data[0].embedding
@@ -153,8 +147,6 @@ def answer_query(query: str, k: int = 3) -> str:
         pickle.dump(chat_cache, f)
     return out
 
-
-
 def extrair_texto(url: str) -> str:
     r = requests.get(url)
     r.raise_for_status()
@@ -162,27 +154,13 @@ def extrair_texto(url: str) -> str:
     for t in soup(['script', 'style', 'nav', 'header', 'footer', 'aside']):
         t.decompose()
     texto = "\n".join(l.strip() for l in soup.get_text().splitlines() if l.strip())
-
-    
-    texto = texto.encode('latin-1', errors='ignore').decode('latin-1')
-
-    return texto
-
+    return texto.encode('latin-1', errors='ignore').decode('latin-1')
 
 def gerar_pdf(urls: List[str], output: str):
-    base_dir = Path(__file__).resolve().parent
-    fonts_dir = base_dir / 'fonts'
-
-    font_regular = fonts_dir / 'DejaVuSans.ttf'
-    font_bold    = fonts_dir / 'DejaVuSans-Bold.ttf'
-    logger.info("Usando pasta de fontes em: %s", fonts_dir)
-
     pdf = FPDF()
     pdf.set_auto_page_break(True, margin=15)
-
-    pdf.add_font('DejaVu', '',   str(font_regular), uni=True)
-    pdf.add_font('DejaVu', 'B',  str(font_bold),    uni=True)
-
+    pdf.add_font('DejaVu', '', str(FONTS_DIR / 'DejaVuSans.ttf'), uni=True)
+    pdf.add_font('DejaVu', 'B', str(FONTS_DIR / 'DejaVuSans-Bold.ttf'), uni=True)
     for url in urls:
         txt = extrair_texto(url)
         pdf.add_page()
@@ -191,18 +169,14 @@ def gerar_pdf(urls: List[str], output: str):
         pdf.ln(2)
         pdf.set_font('DejaVu', '', 12)
         pdf.multi_cell(0, 6, txt)
-
     pdf.output(output)
 
-
-def process_urls(urls: List[str]):
+def process_urls(urls: List[str], files_data: Optional[List[Tuple[str, bytes]]] = None):
     global idx, blocos, status, embed_cache
-
     try:
-        if os.path.exists(CHUNK_CACHE_FILE):
-            os.remove(CHUNK_CACHE_FILE)
-        if os.path.exists(EMBED_CACHE_FILE):
-            os.remove(EMBED_CACHE_FILE)
+        for f in (CHUNK_CACHE_FILE, EMBED_CACHE_FILE):
+            if os.path.exists(f):
+                os.remove(f)
         embed_cache.clear()
     except Exception as e:
         logger.warning("Não foi possível limpar caches: %s", e)
@@ -210,51 +184,64 @@ def process_urls(urls: List[str]):
     try:
         status.update(status="queued", progress=0, message=None)
 
-        status.update(status="generating_pdf", progress=10)
-        gerar_pdf(urls, DEFAULT_PDF_PATH)
+        texts = []
+        if urls:
+            status.update(status="generating_pdf", progress=10)
+            gerar_pdf(urls, DEFAULT_PDF_PATH)
+            status.update(status="reading_pdf", progress=30)
+            texts.append(load_pdf_clean(DEFAULT_PDF_PATH))
 
-        status.update(status="reading_pdf", progress=30)
-        text = load_pdf_clean(DEFAULT_PDF_PATH)
+        if files_data:
+            for filename, blob in files_data:
+                safe = secure_filename(filename)
+                path = os.path.join(DEPLOY_DIR, safe)
+                with open(path, "wb") as f_out:
+                    f_out.write(blob)
+                status.update(status="reading_pdf", progress=40)
+                texts.append(load_pdf_clean(path))
 
+        full_text = "\n\n".join(texts)
         status.update(status="chunking", progress=50)
-        blocos = get_semantic_chunks(text)
-
+        blocos = get_semantic_chunks(full_text)
         status.update(status="embedding", progress=70)
         embs = get_embeddings(blocos)
-
         status.update(status="indexing", progress=85)
         idx = build_faiss_index(embs)
-
         status.update(status="ready", progress=100)
+
     except Exception as e:
         logger.exception("Erro no processamento")
         status.update(status="error", progress=0, message=str(e))
-
-
 
 app = Flask(__name__)
 api = Api(app, version="1.0", title="Unified PDF RAG API",
           description="Contexto só é reconstruído em POST /process", doc="/docs")
 
-process_model = api.model("Process", {
-    "urls": fields.List(fields.String, required=True, description="URLs para processar")
-})
-query_model = api.model("Query", {
-    "query": fields.String(required=True, description="Pergunta"),
-    "k":     fields.Integer(default=3,   description="Número de chunks")
-})
-status_model = api.model("Status", {
-    "status":   fields.String(required=True),
-    "progress": fields.Integer(required=True),
-    "message":  fields.String
-})
+upload_parser = reqparse.RequestParser()
+upload_parser.add_argument("urls", type=str, required=False, location="form", help="JSON com lista de URLs")
+upload_parser.add_argument("files", type='file', location="files", required=False, action="append", help="Arquivos PDF")
+
+status_model = api.model("Status", {"status": fields.String, "progress": fields.Integer, "message": fields.String})
+query_model  = api.model("Query", {"query": fields.String(required=True), "k": fields.Integer(default=3)})
 
 @api.route("/process")
 class ProcessResource(Resource):
-    @api.expect(process_model)
+    @api.expect(upload_parser)
     def post(self):
-        data = request.get_json()
-        threading.Thread(target=process_urls, args=(data["urls"],), daemon=True).start()
+        urls = []
+        if request.form.get("urls"):
+            try:
+                urls = json.loads(request.form["urls"])
+            except json.JSONDecodeError:
+                api.abort(400, "Campo 'urls' não é um JSON válido")
+
+        files_data: List[Tuple[str, bytes]] = []
+        for f in request.files.getlist("files"):
+            name = secure_filename(f.filename)
+            blob = f.read()
+            files_data.append((name, blob))
+
+        threading.Thread(target=process_urls, args=(urls, files_data), daemon=True).start()
         return {"message": "Processamento iniciado"}, 202
 
 @api.route("/status")
@@ -269,19 +256,20 @@ class QueryResource(Resource):
     def post(self):
         data = request.get_json()
         try:
-            resp = answer_query(data["query"], data.get("k", 3))
-            return {"response": resp}
+            answer = answer_query(data["query"], data.get("k", 3))
+            return {"answer": answer}
         except RuntimeError as e:
             api.abort(400, str(e))
 
 if __name__ == "__main__":
     if os.path.exists(CHUNK_CACHE_FILE):
         with open(CHUNK_CACHE_FILE, "r", encoding="utf-8") as f:
-            blocos = [ch["chunk"] for ch in json.load(f)]
+            blocos = [c["chunk"] for c in json.load(f)]
     if os.path.exists(EMBED_CACHE_FILE):
         with open(EMBED_CACHE_FILE, "rb") as f:
             embed_cache = pickle.load(f)
     if os.path.exists(CHAT_CACHE_FILE):
         with open(CHAT_CACHE_FILE, "rb") as f:
             chat_cache = pickle.load(f)
+
     app.run(host="0.0.0.0", port=8001, debug=True)
