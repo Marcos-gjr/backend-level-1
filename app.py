@@ -32,13 +32,13 @@ OPENAI_API = os.getenv("OPENAI_API")
 logger.info("OPENAI_API_KEY 3 de %s", OPENAI_API)
 client = OpenAI(api_key=OPENAI_API)
 
-CHUNK_MODEL      = os.getenv("CHUNK_MODEL")
-EMBED_MODEL      = os.getenv("EMBED_MODEL")
-CHAT_MODEL       = os.getenv("CHAT_MODEL")
-DEFAULT_PDF_PATH = os.getenv("DEFAULT_PDF_PATH")
-CHUNK_CACHE_FILE = os.getenv("CHUNK_CACHE_FILE")
-EMBED_CACHE_FILE = os.getenv("EMBED_CACHE_FILE")
-CHAT_CACHE_FILE  = os.getenv("CHAT_CACHE_FILE")
+CHUNK_MODEL      = "gpt-4"
+EMBED_MODEL      = "text-embedding-3-large"
+CHAT_MODEL       = "gpt-3.5-turbo"
+DEFAULT_PDF_PATH = "./documentacao.pdf"
+CHUNK_CACHE_FILE = "semantic_chunks.json"
+EMBED_CACHE_FILE = "embeddings_cache.pkl"
+CHAT_CACHE_FILE  = "chat_cache.pkl"
 BASE_DIR   = os.path.abspath(os.path.dirname(__file__))
 DEPLOY_DIR = os.getcwd()
 
