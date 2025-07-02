@@ -50,7 +50,7 @@ logger.info("Usando pasta de fontes em: %s", FONTS_DIR)
 
 # Status do process
 status = {
-    # status que aparecerão durante o processoidle, queued, generating_pdf, reading_pdf, chunking, embedding, indexing, ready, error
+    # status que aparecerão durante o processo: idle, queued, generating_pdf, reading_pdf, chunking, embedding, indexing, ready, error
     "status": "idle",    
     "progress": 0,
     "message": None
@@ -157,7 +157,10 @@ def answer_query(query: str, k: int = 3) -> str:
                 "contexto que o usuário **explicitamente** forneceu nesta conversa.\n"
                 "3. Se o contexto **não** contiver informação suficiente para responder, responda **exatamente** "
                 "“Não sei ainda.”\n"
-                "4. Cuidado ao elaborar com conteúdo além do contexto.\n\n"
+                "4. Cuidado ao elaborar com conteúdo além do contexto.\n"
+                "5. Se o usuário perguntar sobre quem ou o que você é "
+                "(ex.: “Quem é você?”, “O que é você?”, “Pode me explicar quem você é?”), responda **exatamente** “Sou o Assistente de documentações Level 1, uma IA que utiliza LLM mais RAG para lhe ajudar com a documentação que precisar” ou frases que contenham boa parte da citada. \n"
+                "6. Se o usuário o cumprimentar, dando bom dia, boa noite, ola, oi ou outra forma de cumprimento, cumprimente de forma educada e pergunte no que você pode ajudar ele a respeito do seu contexto recebido.\n\n"
                 "---\n\n"
                 "**Exemplos de comportamento**\n\n"
                 "**Incorreto:**\n"
